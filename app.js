@@ -3111,30 +3111,42 @@ function togglePw(id, btn) {
                 const prize = this.pickPrize();
                 if(!prize) { NotificationManager.error('ຜິດພາດ: ໄດ້ລາງວັນບໍ່ສຳເລັດ'); return; }
 
-                // หมุน animation
+                // หมุน animation — คำนวณ angle ให้วงล้อหยุดตรงช่องที่สุ่มได้จริงๆ
                 this.isSpinning = true;
                 document.getElementById('spin-btn').disabled = true;
                 document.getElementById('spin-result-box').style.display = 'none';
 
                 const n = this.prizes.length;
                 const prizeIdx = this.prizes.indexOf(prize);
-                const arc = (Math.PI*2)/n;
-                const targetAngle = -(arc * prizeIdx + arc/2) + Math.PI/2;
-                const spins = 5 + Math.random()*3;
-                const finalAngle = spins*Math.PI*2 + targetAngle - (this.currentAngle % (Math.PI*2));
+                const arc = (Math.PI * 2) / n;
+
+                // draw() วาดช่อง i ที่ start = arc*i - PI/2 (ctx ถูก rotate ด้วย currentAngle แล้ว)
+                // pointer อยู่บนสุด = angle 0 ของ canvas = -PI/2 ของวงล้อ
+                // เราต้องการให้กึ่งกลางช่อง prizeIdx อยู่ที่ angle -PI/2 (บนสุด)
+                // กึ่งกลางช่อง prizeIdx ใน local coords = arc*prizeIdx - PI/2 + arc/2
+                // ต้องการให้: currentAngle + (arc*prizeIdx - PI/2 + arc/2) = -PI/2
+                // => currentAngle = -arc*prizeIdx - arc/2
+                const targetLocalAngle = -(arc * prizeIdx + arc / 2);
+                // ปรับให้ currentAngle วิ่งไปข้างหน้าเสมอ (หมุนทวนเข็ม = angle เพิ่มขึ้น)
+                const spins = 6 + Math.floor(Math.random() * 4);
+                let diff = targetLocalAngle - (this.currentAngle % (Math.PI * 2));
+                if(diff > 0) diff -= Math.PI * 2;
+                const finalAngle = this.currentAngle + (Math.PI * 2 * spins) + diff;
+
                 const duration = 4500;
                 const start = performance.now();
                 const startAngle = this.currentAngle;
 
                 const animate = (now) => {
                     const elapsed = now - start;
-                    const t = Math.min(elapsed/duration, 1);
-                    const ease = t<0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2;
-                    this.currentAngle = startAngle + finalAngle * ease;
+                    const t = Math.min(elapsed / duration, 1);
+                    const ease = t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+                    this.currentAngle = startAngle + (finalAngle - startAngle) * ease;
                     this.draw();
-                    if(t < 1) { requestAnimationFrame(animate); }
-                    else {
-                        this.currentAngle = startAngle + finalAngle;
+                    if(t < 1) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        this.currentAngle = finalAngle;
                         this.draw();
                         this.onSpinEnd(prize, newTickets);
                     }
@@ -3144,14 +3156,15 @@ function togglePw(id, btn) {
 
             pickPrize: function() {
                 const available = this.prizes.filter(p => p.stock === 0 || (p.stock_used||0) < p.stock);
-                if(!available.length) return this.prizes[Math.floor(Math.random()*this.prizes.length)];
-                const total = available.reduce((s,p) => s + (parseFloat(p.pct)||0), 0);
+                if(!available.length) return this.prizes[Math.floor(Math.random() * this.prizes.length)];
+                const total = available.reduce((s, p) => s + (parseFloat(p.pct) || 0), 0);
+                if(total <= 0) return available[Math.floor(Math.random() * available.length)];
                 let r = Math.random() * total;
                 for(const p of available) {
-                    r -= parseFloat(p.pct)||0;
+                    r -= parseFloat(p.pct) || 0;
                     if(r <= 0) return p;
                 }
-                return available[available.length-1];
+                return available[available.length - 1];
             },
 
             onSpinEnd: async function(prize, newTickets) {
