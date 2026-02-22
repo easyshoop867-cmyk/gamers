@@ -531,32 +531,32 @@ function togglePw(id, btn) {
             loading: (show) => document.getElementById('loader').style.display = show ? 'block' : 'none',
 
             fetchData: async function() {
-                const { data: st } = await _supabase.from('settings').select('*').eq('id', 1).maybeSingle();
-                const { data: ct } = await _supabase.from('categories').select('*');
-                const { data: pd } = await _supabase.from('products').select('*').order('created_at', { ascending: false });
-                const { data: us } = await _supabase.from('users').select('*');
-                const { data: siteUsers } = await _supabase.from('site_users').select('*').order('created_at', { ascending: false });
-                const { data: pop } = await _supabase.from('popups').select('*').order('order', { ascending: true });
-                const { data: codes } = await _supabase.from('redeem_codes').select('*');
-                const { data: topups } = await _supabase.from('topup_requests').select('*').order('created_at', { ascending: false });
-                const { data: orders } = await _supabase.from('orders').select('*').order('created_at', { ascending: false });
-                
-                if(st && st.data) this.db.settings = st.data;
-                if(ct) this.db.categories = ct;
-                if(pd) this.db.products = pd;
-                if(us) this.db.users = us;
-                if(siteUsers) this.db.site_users = siteUsers;
-                if(pop) this.db.popups = pop;
-                if(codes) this.db.redeem_codes = codes;
-                if(topups) this.db.topup_requests = topups;
-                if(orders) this.db.orders = orders;
-                
-                // โหลด hot deals จาก Supabase
-                const { data: hotDeals } = await _supabase.from('hot_deals').select('*');
-                if(hotDeals) {
+                // โหลดทุกอย่างพร้อมกัน (parallel) แทน sequential
+                const [stR, ctR, pdR, usR, suR, popR, codeR, topupR, orderR, hotR] = await Promise.all([
+                    _supabase.from('settings').select('*').eq('id', 1).maybeSingle(),
+                    _supabase.from('categories').select('*'),
+                    _supabase.from('products').select('*').order('created_at', { ascending: false }),
+                    _supabase.from('users').select('*'),
+                    _supabase.from('site_users').select('*').order('created_at', { ascending: false }),
+                    _supabase.from('popups').select('*').order('order', { ascending: true }),
+                    _supabase.from('redeem_codes').select('*'),
+                    _supabase.from('topup_requests').select('*').order('created_at', { ascending: false }),
+                    _supabase.from('orders').select('*').order('created_at', { ascending: false }),
+                    _supabase.from('hot_deals').select('*'),
+                ]);
+                if(stR.data && stR.data.data) this.db.settings = stR.data.data;
+                if(ctR.data) this.db.categories = ctR.data;
+                if(pdR.data) this.db.products = pdR.data;
+                if(usR.data) this.db.users = usR.data;
+                if(suR.data) this.db.site_users = suR.data;
+                if(popR.data) this.db.popups = popR.data;
+                if(codeR.data) this.db.redeem_codes = codeR.data;
+                if(topupR.data) this.db.topup_requests = topupR.data;
+                if(orderR.data) this.db.orders = orderR.data;
+                if(hotR.data) {
                     this.db.hot_deals = {
-                        categories: hotDeals.filter(d => d.type === 'category').map(d => d.item_id),
-                        products: hotDeals.filter(d => d.type === 'product').map(d => d.item_id)
+                        categories: hotR.data.filter(d => d.type === 'category').map(d => d.item_id),
+                        products: hotR.data.filter(d => d.type === 'product').map(d => d.item_id)
                     };
                 }
             },
@@ -3179,6 +3179,11 @@ function togglePw(id, btn) {
                 } else if(prize.type === 'product' && prize.product_id) {
                     const prod = app.db.products.find(p => p.id === prize.product_id);
                     if(prod) {
+                        // สร้าง unique ID เหมือนการซื้อปกติ
+                        const ts = Date.now().toString(36).toUpperCase();
+                        const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+                        const spinUniqueId = prod.has_product_id ? ('EZ-' + ts + '-' + rand) : null;
+
                         const { error: orderErr } = await _supabase.from('orders').insert([{
                             user_id: currentUser.id,
                             product_id: prod.id,
@@ -3188,6 +3193,7 @@ function togglePw(id, btn) {
                             quantity: 1,
                             total_amount: 0,
                             status: 'completed',
+                            product_unique_id: spinUniqueId,
                             note: 'ໄດ້ຈາກວົງລໍ້'
                         }]);
                         if(orderErr) {
@@ -3195,9 +3201,20 @@ function togglePw(id, btn) {
                             resultDesc = `ໄດ້ຮັບ "${prod.name}" (ກະລຸນາຕິດຕໍ່ Admin ຖ້າບໍ່ໂຊ)`;
                         } else {
                             resultDesc = `ໄດ້ຮັບ "${prod.name}" ກວດສອບໃນປະຫວັດ!`;
+                            // trim orders เหมือนการซื้อปกติ (จำกัด 10)
+                            const { data: userOrders } = await _supabase
+                                .from('orders')
+                                .select('id, created_at')
+                                .eq('user_id', currentUser.id)
+                                .order('created_at', { ascending: true });
+                            if(userOrders && userOrders.length > 10) {
+                                const toDelete = userOrders.slice(0, userOrders.length - 10).map(o => o.id);
+                                await _supabase.from('orders').delete().in('id', toDelete);
+                            }
                         }
                     } else {
                         resultDesc = `ໄດ້ຮັບ "${prize.display_name}" ກະລຸນາຕິດຕໍ່ Admin`;
+                    }
                     }
                 } else if(prize.type === 'custom') {
                     resultDesc = `ກະລຸນາຕິດຕໍ່ Admin ເພື່ອຮັບ "${prize.display_name}"`;
@@ -3221,6 +3238,17 @@ function togglePw(id, btn) {
                     prize_amount: prize.amount || 0
                 }]);
                 if(histErr) console.error('spin history error:', histErr);
+
+                // ลบประวัติเก่าเกิน 20 อัน (เก็บแค่ 20 ล่าสุดต่อคน)
+                const { data: allHist } = await _supabase
+                    .from('spin_history')
+                    .select('id, created_at')
+                    .eq('user_id', currentUser.id)
+                    .order('created_at', { ascending: false });
+                if(allHist && allHist.length > 20) {
+                    const toDelete = allHist.slice(20).map(h => h.id);
+                    await _supabase.from('spin_history').delete().in('id', toDelete);
+                }
 
                 // แสดง popup หลังจากรู้ผลทุกอย่างแล้ว
                 spinWheel.showWinPopup(prize, resultDesc);
