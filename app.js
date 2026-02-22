@@ -3155,10 +3155,7 @@ function togglePw(id, btn) {
             },
 
             onSpinEnd: async function(prize, newTickets) {
-                // แสดง popup สวยๆ
-                spinWheel.showWinPopup(prize, '');
-
-                // ส่งรางวัล
+                // ส่งรางวัล (ทำก่อน แล้วค่อยแสดง popup)
                 let resultDesc = '';
                 if(prize.type === 'cash') {
                     const newBal = (currentUser.balance||0) + (prize.amount||0);
@@ -3169,30 +3166,40 @@ function togglePw(id, btn) {
                 } else if(prize.type === 'product' && prize.product_id) {
                     const prod = app.db.products.find(p => p.id === prize.product_id);
                     if(prod) {
-                        await _supabase.from('orders').insert([{
+                        const { error: orderErr } = await _supabase.from('orders').insert([{
                             user_id: currentUser.id,
                             product_id: prod.id,
                             product_name: prod.name,
+                            product_img: prod.img || '',
+                            product_price: 0,
+                            quantity: 1,
                             total_amount: 0,
-                            status: 'spin_win',
+                            status: 'completed',
                             note: 'ໄດ້ຈາກວົງລໍ້'
                         }]);
-                        resultDesc = `ໄດ້ຮັບ "${prod.name}" ກວດສອບໃນປະຫວັດ!`;
+                        if(orderErr) {
+                            console.error('spin order error:', orderErr);
+                            resultDesc = `ໄດ້ຮັບ "${prod.name}" (ກະລຸນາຕິດຕໍ່ Admin ຖ້າບໍ່ໂຊ)`;
+                        } else {
+                            resultDesc = `ໄດ້ຮັບ "${prod.name}" ກວດສອບໃນປະຫວັດ!`;
+                        }
+                    } else {
+                        resultDesc = `ໄດ້ຮັບ "${prize.display_name}" ກະລຸນາຕິດຕໍ່ Admin`;
                     }
                 } else if(prize.type === 'custom') {
                     resultDesc = `ກະລຸນາຕິດຕໍ່ Admin ເພື່ອຮັບ "${prize.display_name}"`;
                 } else if(prize.type === 'miss') {
                     resultDesc = 'ໂຊກດີຄັ້ງໜ້າ!';
                 }
-                document.getElementById('spin-result-desc').textContent = resultDesc;
 
                 // อัปเดต stock_used
                 if(prize.stock > 0) {
                     await _supabase.from('spin_prizes').update({ stock_used: (prize.stock_used||0)+1 }).eq('id', prize.id);
+                    prize.stock_used = (prize.stock_used||0)+1;
                 }
 
-                // บันทึกประวัติ
-                await _supabase.from('spin_history').insert([{
+                // บันทึกประวัติ spin
+                const { error: histErr } = await _supabase.from('spin_history').insert([{
                     user_id: currentUser.id,
                     username: currentUser.username,
                     prize_id: prize.id,
@@ -3200,13 +3207,18 @@ function togglePw(id, btn) {
                     prize_type: prize.type,
                     prize_amount: prize.amount || 0
                 }]);
+                if(histErr) console.error('spin history error:', histErr);
+
+                // แสดง popup หลังจากรู้ผลทุกอย่างแล้ว
+                spinWheel.showWinPopup(prize, resultDesc);
+                document.getElementById('spin-result-desc').textContent = resultDesc;
+                document.getElementById('spin-win-desc').textContent = resultDesc;
 
                 // อัปเดต UI
                 this.isSpinning = false;
                 document.getElementById('spin-btn').disabled = false;
                 document.getElementById('spin-tickets-count').textContent = newTickets;
                 spinWheel._pendingResultDesc = resultDesc;
-                document.getElementById('spin-win-desc').textContent = resultDesc;
                 app.loadSpinHistory();
             },
 
