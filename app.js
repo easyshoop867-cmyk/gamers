@@ -330,7 +330,6 @@ function togglePw(id, btn) {
                 this.popups = popupList.sort((a, b) => a.order - b.order);
                 this.currentIndex = 0;
                 if (this.popups.length > 0) {
-                    document.body.classList.add('popup-blocking');
                     this.show();
                 }
             },
@@ -384,8 +383,6 @@ function togglePw(id, btn) {
                 this.currentIndex++;
                 if (this.currentIndex < this.popups.length) {
                     setTimeout(() => this.show(), 200);
-                } else {
-                    document.body.classList.remove('popup-blocking');
                 }
             },
 
@@ -498,8 +495,6 @@ function togglePw(id, btn) {
 
                 if (this.db.popups && this.db.popups.length > 0) {
                     popupSystem.init(this.db.popups);
-                } else {
-                    document.body.classList.remove('popup-blocking');
                 }
 
                 // ปิด loading screen ทันที ไม่รอ

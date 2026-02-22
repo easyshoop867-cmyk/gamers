@@ -2031,8 +2031,6 @@
                 .ov-refresh-btn:hover { background:rgba(124,58,237,0.3); }
                 .ov-loading { text-align:center; padding:40px; color:#555; font-size:14px; }
 
-/* ===== Performance & Popup Blocking ===== */
+/* ===== Performance ===== */
 .prod-card, .cat-item { contain: layout style; }
 .notification, .modal-content, .popup-container { will-change: transform, opacity; }
-body.popup-blocking { pointer-events: none; }
-body.popup-blocking #popup-system { pointer-events: all; }
