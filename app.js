@@ -468,9 +468,23 @@ function togglePw(id, btn) {
             },
             
             init: async function() {
+                // ซ่อน body ทั้งหมดก่อน — ป้องกันตัวหนังสือแว๊บ
+                document.body.style.visibility = 'hidden';
+
+                // แสดง loading screen ทันที
+                const loadingScreen = document.getElementById('loading-screen');
+                if(loadingScreen) {
+                    loadingScreen.style.display = 'flex';
+                    loadingScreen.style.opacity = '1';
+                    loadingScreen.style.visibility = 'visible';
+                    loadingScreen.classList.remove('hide');
+                }
+                // เปิด body แต่ loading screen ปิดทับอยู่แล้ว
+                document.body.style.visibility = 'visible';
+
                 this.loading(true);
 
-                // PHASE 1: โหลดเฉพาะที่จำเป็น ยิงพร้อมกันทีเดียว
+                // โหลดทุกอย่างที่ต้องใช้ใน home พร้อมกัน
                 const [popRes, stRes, ctRes, pdRes, hotRes] = await Promise.all([
                     _supabase.from('popups').select('*').order('order', { ascending: true }),
                     _supabase.from('settings').select('*').eq('id', 1).maybeSingle(),
@@ -491,26 +505,30 @@ function togglePw(id, btn) {
                 }
 
                 await this.loadUserSession();
+
+                // render home ให้เสร็จก่อน แล้วค่อยเปิด
                 this.renderHome();
+                await this.loadAnnouncement();
 
-                if (this.db.popups && this.db.popups.length > 0) {
-                    popupSystem.init(this.db.popups);
-                }
+                // เปิด view-home หลัง render เสร็จ
+                const viewHome = document.getElementById('view-home');
+                if(viewHome) viewHome.classList.remove('hidden');
 
-                // ปิด loading screen ทันที ไม่รอ
                 this.loading(false);
                 localStorage.removeItem('adminLogin');
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        const loadingScreen = document.getElementById('loading-screen');
-                        if (loadingScreen) {
-                            loadingScreen.classList.add('hide');
-                            setTimeout(() => { loadingScreen.style.display = 'none'; }, 500);
-                        }
-                    });
-                });
 
-                // PHASE 2: โหลดส่วนที่เหลือ background ไม่บล็อก UI
+                // ปิด loading screen
+                if(loadingScreen) {
+                    loadingScreen.classList.add('hide');
+                    setTimeout(() => { loadingScreen.style.display = 'none'; }, 500);
+                }
+
+                // popup หลัง loading screen หายไปแล้ว
+                if(this.db.popups && this.db.popups.length > 0) {
+                    setTimeout(() => popupSystem.init(this.db.popups), 600);
+                }
+
+                // โหลดส่วนที่เหลือ background
                 Promise.all([
                     _supabase.from('users').select('*'),
                     _supabase.from('site_users').select('*').order('created_at', { ascending: false }),
@@ -524,8 +542,6 @@ function togglePw(id, btn) {
                     if(topupRes.data) this.db.topup_requests = topupRes.data;
                     if(orderRes.data) this.db.orders = orderRes.data;
                 });
-
-                this.loadAnnouncement();
             },
 
             loading: (show) => document.getElementById('loader').style.display = show ? 'block' : 'none',
