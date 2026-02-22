@@ -498,6 +498,8 @@ function togglePw(id, btn) {
 
                 if (this.db.popups && this.db.popups.length > 0) {
                     popupSystem.init(this.db.popups);
+                } else {
+                    document.body.classList.remove('popup-blocking');
                 }
 
                 // ปิด loading screen ทันที ไม่รอ
